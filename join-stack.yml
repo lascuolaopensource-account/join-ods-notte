@@ -1,0 +1,98 @@
+version: '3'
+
+services:
+  database:
+    image: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=gestionale
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=12345678
+
+  frontend:
+    image: registry.gitlab.com/lascuolaopensource/ods-frontend
+    networks:
+      - default
+      - traefik-public
+    depends_on:
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.tpublicfrontend.rule=Host(`join.odsmatera.it`)"
+        - "traefik.http.routers.tpublicfrontend.entrypoints=websecure"
+        - "traefik.http.routers.tpublicfrontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.tpublicfrontend.loadbalancer.server.port=80"
+
+  admin-frontend:
+    image: registry.gitlab.com/lascuolaopensource/ods-admin-frontend
+    networks:
+      - default
+      - traefik-public
+    depends_on:
+      - backend
+    deploy:
+      mode: replicated                                                                                                                                         
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.tadminfrontend.rule=Host(`admin.odsmatera.it`)"
+        - "traefik.http.routers.tadminfrontend.entrypoints=websecure"
+        - "traefik.http.routers.tadminfrontend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.tadminfrontend.loadbalancer.server.port=80"
+  
+  backend:
+    image: registry.gitlab.com/lascuolaopensource/ods-backend
+    command: bash -c "sbt stage && sbt seedDataProd && target/universal/stage/bin/sos -Dconfig.resource=env/prod.conf -Dhttp.port=9000 -Dlogger.resource=logback.xml -Dplay.evolutions.db.default.autoApply=true -Dplay.http.secret.key='QCY?tAnfk?aZ?iwrNwnxIlR6CTf:G3gf:90Latabg@5241ABR5W:1uDFN];Ik@n'"
+    networks:
+      - default
+      - traefik-public
+    depends_on:
+      - database
+    deploy:
+      mode: replicated                                                                                                                                         
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.tbackend.rule=Host(`login.odsmatera.it`)"
+        - "traefik.http.routers.tbackend.entrypoints=websecure"
+        - "traefik.http.routers.tbackend.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.tbackend.loadbalancer.server.port=9000"
+       
+  pgadmin:
+    image: dpage/pgadmin4
+    networks:
+      - default
+      - traefik-public
+    volumes:
+      - pgadmin:/root/.pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=dummy@pgadmin.xyz
+      - PGADMIN_DEFAULT_PASSWORD=12341234
+    deploy:
+      mode: replicated                                                                                                                                         
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.tpgadmin.rule=Host(`pgadmin.odsmatera.it`)"
+        - "traefik.http.routers.tpgadmin.entrypoints=websecure"
+        - "traefik.http.routers.tpgadmin.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.tpgadmin.loadbalancer.server.port=80"
+
+networks:
+   traefik-public:
+     external: true
+volumes:
+   pgadmin:
+   postgres-data:
